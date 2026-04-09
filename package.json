@@ -1,0 +1,152 @@
+{
+  "name": "trace-template-ai",
+  "displayName": "Trace Template AI",
+  "description": "Insert, manage and clean trace/debug logs using configurable templates",
+  "version": "1.0.1",
+  "publisher": "trace-template-ai",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "trace.insert",
+        "title": "Trace: Insertar trazas"
+      },
+      {
+        "command": "trace.clean",
+        "title": "Trace: Limpiar trazas"
+      },
+      {
+        "command": "trace.analyze",
+        "title": "Trace: Analizar código"
+      },
+      {
+        "command": "trace.configure",
+        "title": "Trace: Configuración rápida"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "trace.insert",
+          "when": "editorHasSelection",
+          "group": "trace@1"
+        },
+        {
+          "command": "trace.clean",
+          "group": "trace@2"
+        },
+        {
+          "command": "trace.analyze",
+          "when": "editorHasSelection",
+          "group": "trace@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Trace Template AI (traceTemplateAI)",
+      "properties": {
+        "traceTemplateAI.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Activa o desactiva la extensión. Si es false, los comandos Trace no insertan ni limpian nada."
+        },
+        "traceTemplateAI.mode": {
+          "type": "string",
+          "enum": [
+            "template"
+          ],
+          "default": "template",
+          "description": "Modo de generación de trazas. 'template' usa reglas locales y las plantillas definidas en traceTemplateAI.templates para construir cada línea. Este modo funciona con o sin IA."
+        },
+        "traceTemplateAI.useAI": {
+          "type": "boolean",
+          "default": false,
+          "description": "Activa el uso de IA para generar etiquetas más descriptivas. Si es false, la extensión funciona SIN IA: no hace llamadas a Copilot ni a Anthropic y genera $label localmente con reglas de código."
+        },
+        "traceTemplateAI.aiProvider": {
+          "type": "string",
+          "enum": ["anthropic", "copilot"],
+          "default": "anthropic",
+          "description": "Proveedor de IA a usar SOLO cuando traceTemplateAI.useAI=true. Si traceTemplateAI.useAI=false, este valor se ignora. 'anthropic' llama a la API de Claude (requiere traceTemplateAI.anthropicApiKey). 'copilot' usa el modelo activo de GitHub Copilot dentro de VSCode (requiere tener Copilot instalado y activo)."
+        },
+        "traceTemplateAI.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Clave de API de Anthropic. Solo se usa cuando traceTemplateAI.aiProvider='anthropic'. Obtenerla en console.anthropic.com."
+        },
+        "traceTemplateAI.copilotRequireGPT4": {
+          "type": "boolean",
+          "default": true,
+          "description": "Solo aplica cuando traceTemplateAI.aiProvider='copilot'. Si es true, exige GPT-4 (y pide confirmación si no hay). Si es false, no fuerza GPT-4 y prefiere un modelo no GPT-4 cuando existe."
+        },
+        "traceTemplateAI.insertMinPriority": {
+          "type": "string",
+          "enum": ["all", "low", "medium", "high"],
+          "default": "all",
+          "description": "Solo aplica cuando traceTemplateAI.useAI=true. Define la prioridad mínima de trazas a insertar: all (todas), low, medium o high (solo estratégicas)."
+        },
+        "traceTemplateAI.languageProfiles": {
+          "type": "object",
+          "default": {
+            "cor": {
+              "traceFunction": "crerror"
+            },
+            "typescript": {
+              "traceFunction": "console.log"
+            },
+            "python": {
+              "traceFunction": "print"
+            }
+          },
+          "description": "Define qué función de traza se usa por lenguaje. La clave es el ID del lenguaje (cor, typescript, python, etc.) y el valor es un objeto con 'traceFunction'. Este valor se puede usar como referencia en plantillas personalizadas."
+        },
+        "traceTemplateAI.templates": {
+          "type": "object",
+          "default": {
+            "cor": {
+              "variable": "crerror(#file, #line, \"$label\" + ($valor));",
+              "return": "crerror(#file, #line, \"RETORNO \" + ($valor));",
+              "condition": "crerror(#file, #line, \"$label\" + (($valor) ? \" TRUE\" : \" FALSE\"));"
+            },
+            "typescript": {
+              "variable": "console.log(\"$label\", $valor);",
+              "return": "console.log(\"RETURN\", $valor);",
+              "condition": "console.log(\"$label\", Boolean($valor));"
+            },
+            "python": {
+              "variable": "print(\"$label\", $valor)",
+              "return": "print(\"RETURN\", $valor)",
+              "condition": "print(\"$label\", bool($valor))"
+            }
+          },
+          "description": "Plantillas de traza por lenguaje y tipo de elemento detectado. Claves disponibles por lenguaje: 'variable' (para variables y parámetros) y 'return' (para valores de retorno). Placeholders: $label = etiqueta descriptiva, $valor = nombre de la variable/expresión, #file = nombre del archivo, #line = número de línea."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run bundle",
+    "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "compile": "tsc -p ./",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "pretest": "npm run compile",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.4",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0"
+  }
+}
