@@ -1,61 +1,52 @@
 import * as vscode from 'vscode';
-import { analyzeLines, inferFunctionName } from '../core/analyzer';
 import { resolveLanguage } from '../core/languageResolver';
 import { getTraceSetting } from '../core/config';
-import { enrichWithAI } from '../providers/aiProvider';
+import { reviewCleanCode } from '../providers/aiProvider';
 
 export async function analyzeCode(): Promise<void> {
+  const useAI = getTraceSetting<boolean>('useAI', false);
+
+  if (!useAI) {
+    vscode.window.showWarningMessage(
+      'Trace: IA no activa. Activa la opción "traceTemplateAI.useAI" en la configuración para usar el análisis de código.'
+    );
+    return;
+  }
+
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return;
   }
 
-  const document = editor.document;
   const selection = editor.selection;
-
   if (selection.isEmpty) {
-    vscode.window.showWarningMessage('Trace: select code lines to analyze.');
+    vscode.window.showWarningMessage('Trace: selecciona un fragmento de código para analizar.');
     return;
   }
 
-  const langKey = resolveLanguage(document);
-  const selectedText = document.getText(selection);
-  const lines = selectedText.split('\n');
+  const langKey = resolveLanguage(editor.document);
+  const selectedText = editor.document.getText(selection);
 
-  const startLine = Math.max(0, selection.start.line - 30);
-  const surroundingText = document.getText(
-    new vscode.Range(startLine, 0, selection.start.line, 0)
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Trace: analizando código...',
+      cancellable: false,
+    },
+    async () => {
+      const result = await reviewCleanCode(selectedText, langKey);
+
+      if (!result) {
+        return;
+      }
+
+      const channel = vscode.window.createOutputChannel('Trace - Análisis de Código');
+      channel.clear();
+      channel.appendLine(`=== Análisis de Código [${langKey}] ===`);
+      channel.appendLine(`Líneas analizadas: ${selection.start.line + 1}–${selection.end.line + 1}`);
+      channel.appendLine('');
+      channel.appendLine(result);
+      channel.show();
+    }
   );
-  const funcName = inferFunctionName(surroundingText);
-
-  const items = analyzeLines(lines, funcName);
-
-  if (items.length === 0) {
-    vscode.window.showInformationMessage(`Trace [${langKey}]: no patterns detected.`);
-    return;
-  }
-
-  const useAI = getTraceSetting<boolean>('useAI', false);
-  const enriched = useAI
-    ? await enrichWithAI(items, selectedText, funcName)
-    : items.map((it) => ({ ...it, aiLabel: it.label as string }));
-
-  // Show results in output channel
-  const channel = vscode.window.createOutputChannel('Trace Analysis');
-  channel.clear();
-  channel.appendLine(`=== Trace Analysis [${langKey}] ===`);
-  if (funcName) {
-    channel.appendLine(`Function: ${funcName}`);
-  }
-  channel.appendLine('');
-
-  for (const item of enriched) {
-    const label = item.aiLabel;
-    channel.appendLine(`Line ${item.lineIndex + 1} [${item.type}]`);
-    channel.appendLine(`  value : ${item.value}`);
-    channel.appendLine(`  label : ${label}`);
-    channel.appendLine('');
-  }
-
-  channel.show();
 }

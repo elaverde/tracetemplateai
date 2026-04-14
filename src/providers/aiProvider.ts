@@ -365,3 +365,122 @@ function fallback(items: DetectedItem[]): AIEnrichedItem[] {
   }));
   return stratifyPriorities(enriched);
 }
+
+// ─── Clean Code Review ────────────────────────────────────────────────────────
+
+function buildCleanCodePrompt(code: string, langKey: string): string {
+  return `Eres un experto en clean code y seguridad de software. Analiza el siguiente fragmento de código (${langKey}) y genera comentarios específicos sobre los problemas encontrados.
+
+Criterios a evaluar:
+1. Nombres claros y significativos: variables, funciones y clases deben tener nombres descriptivos.
+2. Funciones con único propósito: cada función debe hacer una sola cosa.
+3. Comentarios innecesarios: identifica comentarios que explican lo obvio.
+4. Código muerto o redundante: código que no se usa o repite lógica innecesariamente.
+5. Simplicidad: el código debe ser lo más simple posible.
+6. Legibilidad sobre concisión: preferir código claro aunque sea más largo.
+7. Exceso de if/else: condiciones anidadas o encadenadas que dificultan la lectura.
+8. Números mágicos: valores literales sin constante nombrada que explique su significado.
+9. No repetir código (DRY): lógica repetida que debería extraerse en funciones.
+10. Protecciones y seguridad: validaciones de entrada, manejo de errores y posibles vulnerabilidades.
+
+Instrucciones:
+- Por cada problema encontrado indica el fragmento o línea aproximada, el tipo de problema y una sugerencia concreta.
+- Si un aspecto está bien, menciónalo brevemente.
+- Responde en español.
+- Sé directo y específico, evita respuestas genéricas.
+
+Código a analizar:
+\`\`\`${langKey}
+${code}
+\`\`\``;
+}
+
+export async function reviewCleanCode(code: string, langKey: string): Promise<string> {
+  const provider = getTraceSetting<string>('aiProvider', 'anthropic');
+
+  if (provider === 'copilot') {
+    return reviewCleanCodeWithCopilot(code, langKey);
+  }
+  return reviewCleanCodeWithAnthropic(code, langKey);
+}
+
+async function reviewCleanCodeWithAnthropic(code: string, langKey: string): Promise<string> {
+  const apiKey = getTraceSetting<string>('anthropicApiKey', '');
+
+  if (!apiKey) {
+    vscode.window.showWarningMessage(
+      'Trace: aiProvider=anthropic pero falta traceTemplateAI.anthropicApiKey en settings.'
+    );
+    return '';
+  }
+
+  const client = new Anthropic({ apiKey });
+  const prompt = buildCleanCodePrompt(code, langKey);
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    return message.content
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { type: 'text'; text: string }).text)
+      .join('');
+  } catch (err) {
+    vscode.window.showErrorMessage(`Trace AI (Anthropic) error: ${String(err)}`);
+    return '';
+  }
+}
+
+async function reviewCleanCodeWithCopilot(code: string, langKey: string): Promise<string> {
+  const requireGPT4 = getTraceSetting<boolean>('copilotRequireGPT4', true);
+  const prompt = buildCleanCodePrompt(code, langKey);
+
+  try {
+    const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    if (!allModels.length) {
+      vscode.window.showWarningMessage(
+        'Trace: no se encontró un modelo Copilot activo. Instala GitHub Copilot y vuelve a intentarlo.'
+      );
+      return '';
+    }
+
+    const gpt4Models = allModels.filter(isGPT4Model);
+    let model: vscode.LanguageModelChat;
+
+    if (requireGPT4) {
+      model = gpt4Models.length > 0 ? gpt4Models[0] : allModels[0];
+      if (gpt4Models.length === 0) {
+        const modelLabel = `${model.name} (${model.family})`;
+        const action = await vscode.window.showWarningMessage(
+          `Trace AI: No hay modelo GPT-4 disponible. Modelo activo: ${modelLabel}. ¿Continuar igualmente?`,
+          'Continuar',
+          'Cancelar'
+        );
+        if (action !== 'Continuar') {
+          return '';
+        }
+      }
+    } else {
+      const nonGpt4Models = allModels.filter((m) => !isGPT4Model(m));
+      model = nonGpt4Models.length > 0 ? nonGpt4Models[0] : allModels[0];
+    }
+
+    const modelLabel = `${model.name} (${model.family})`;
+    vscode.window.showInformationMessage(`Trace AI usando: ${modelLabel}`);
+
+    const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+    const response = await model.sendRequest(messages, {});
+
+    let text = '';
+    for await (const chunk of response.text) {
+      text += chunk;
+    }
+    return text;
+  } catch (err) {
+    vscode.window.showErrorMessage(`Trace AI (Copilot) error: ${String(err)}`);
+    return '';
+  }
+}

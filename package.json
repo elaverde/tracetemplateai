@@ -4,6 +4,7 @@
   "description": "Insert, manage and clean trace/debug logs using configurable templates",
   "version": "1.0.1",
   "publisher": "trace-template-ai",
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },

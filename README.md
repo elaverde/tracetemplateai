@@ -1,5 +1,9 @@
 # Trace Template AI
 
+<p align="center">
+  <img src="https://i.ibb.co/xKsR7f67/logo2-2.png" alt="Trace Template AI" width="128" />
+</p>
+
 Extensión para VSCode que inserta, gestiona y limpia trazas de depuración usando plantillas configurables, con soporte opcional de IA para generar etiquetas descriptivas automáticamente.
 
 ## Instalación y uso rápido
@@ -24,7 +28,7 @@ Modo recomendado sin IA:
 | ----------------------------- | ------------------------------------------------------------------------------- |
 | `Trace: Insertar trazas`      | Inserta líneas de traza en el código seleccionado                               |
 | `Trace: Limpiar trazas`       | Elimina todas las líneas de traza del archivo actual                            |
-| `Trace: Analizar código`      | Analiza la selección y muestra los puntos de traza detectados                   |
+| `Trace: Analizar código`      | Revisa el fragmento seleccionado con IA: detecta problemas de clean code, nombres poco claros, código muerto, números mágicos, falta de protecciones y más. Requiere `traceTemplateAI.useAI=true` |
 | `Trace: Configuración rápida` | Abre selectores para configurar IA/proveedor/prioridad sin editar settings.json |
 
 También disponibles desde el menú contextual (clic derecho en el editor).
